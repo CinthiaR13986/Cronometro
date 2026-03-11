@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cronómetro de Competidores</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f4f6f9;
+      color: #222;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 4px;
+      font-weight: bold;
+    }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-secondary { background: #6b7280; color: white; }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .timer {
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-align: center;
+      margin: 15px 0;
+      color: #111827;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background: #e5e7eb;
+    }
+    .winner {
+      background: #dcfce7;
+      font-weight: bold;
+    }
+    .pending {
+      background: #fef3c7;
+    }
+    .actions-inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .small {
+      font-size: 0.9rem;
+      color: #555;
+    }
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cronómetro de Competidores</h1>
+    <p class="small">Aplicación web en HTML, CSS y JavaScript para registrar tiempos de llegada y calcular la diferencia contra el primer competidor.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Registrar competidor</h2>
+        <label for="competitorName">Nombre del competidor</label>
+        <input type="text" id="competitorName" placeholder="Ejemplo: Competidor 1" />
+        <button class="btn-primary" id="addCompetitorBtn">Agregar competidor</button>
+        <p class="small">Debes registrar al menos un competidor antes de iniciar.</p>
+      </div>
+
+      <div class="card">
+        <h2>Cronómetro</h2>
+        <div class="timer" id="timerDisplay">00:00:00.000</div>
+        <div class="top-actions">
+          <button class="btn-success" id="startBtn">Iniciar</button>
+          <button class="btn-warning" id="pauseBtn" disabled>Pausar</button>
+          <button class="btn-secondary" id="resumeBtn" disabled>Reanudar</button>
+          <button class="btn-danger" id="resetBtn">Reiniciar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Competidores registrados</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="competitorsTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Resultados</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Posición</th>
+            <th>Competidor</th>
+            <th>Tiempo</th>
+            <th>Diferencia con 1°</th>
+          </tr>
+        </thead>
+        <tbody id="resultsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const competitorNameInput = document.getElementById('competitorName');
+    const addCompetitorBtn = document.getElementById('addCompetitorBtn');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const competitorsTableBody = document.getElementById('competitorsTableBody');
+    const resultsTableBody = document.getElementById('resultsTableBody');
+
+    let competitors = [];
+    let timerInterval = null;
+    let startTime = null;
+    let elapsedBeforePause = 0;
+    let running = false;
+    let paused = false;
+
+    function formatTime(ms) {
+      const hours = Math.floor(ms / 3600000);
+      const minutes = Math.floor((ms % 3600000) / 60000);
+      const seconds = Math.floor((ms % 60000) / 1000);
+      const milliseconds = ms % 1000;
+
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+    }
+
+    function getCurrentElapsed() {
+      if (!running) return elapsedBeforePause;
+      return Date.now() - startTime + elapsedBeforePause;
+    }
+
+    function updateTimer() {
+      timerDisplay.textContent = formatTime(getCurrentElapsed());
+    }
+
+    function renderCompetitors() {
+      competitorsTableBody.innerHTML = '';
+
+      competitors.forEach((competitor, index) => {
+        const tr = document.createElement('tr');
+        tr.className = competitor.finished ? '' : 'pending';
+
+        tr.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${competitor.name}</td>
+          <td>${competitor.finished ? 'Llegó' : 'Pendiente'}</td>
+          <td>
+            <div class="actions-inline">
+              <button class="btn-primary" onclick="markArrival(${competitor.id})" ${!running || paused || competitor.finished ? 'disabled' : ''}>
+                Registrar llegada
+              </button>
+              <button class="btn-danger" onclick="removeCompetitor(${competitor.id})" ${running ? 'disabled' : ''}>
+                Eliminar
+              </button>
+            </div>
+          </td>
+        `;
+
+        competitorsTableBody.appendChild(tr);
+      });
+    }
+
+    function renderResults() {
+      resultsTableBody.innerHTML = '';
+
+      const finishedCompetitors = competitors
+        .filter(c => c.finished)
+        .sort((a, b) => a.time - b.time);
+
+      const firstTime = finishedCompetitors.length > 0 ? finishedCompetitors[0].time : null;
+
+      finishedCompetitors.forEach((competitor, index) => {
+        const tr = document.createElement('tr');
+        if (index === 0) tr.classList.add('winner');
+
+        const diff = competitor.time - firstTime;
+
+        tr.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${competitor.name}</td>
+          <td>${formatTime(competitor.time)}</td>
+          <td>${formatTime(diff)}</td>
+        `;
+
+        resultsTableBody.appendChild(tr);
+      });
+    }
+
+    function addCompetitor() {
+      const name = competitorNameInput.value.trim();
+
+      if (!name) {
+        alert('Ingresa el nombre del competidor.');
+        return;
+      }
+
+      const competitor = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        name,
+        finished: false,
+        time: null
+      };
+
+      competitors.push(competitor);
+      competitorNameInput.value = '';
+      renderCompetitors();
+      renderResults();
+    }
+
+    function markArrival(id) {
+      if (!running || paused) {
+        alert('El cronómetro debe estar en ejecución para registrar una llegada.');
+        return;
+      }
+
+      const competitor = competitors.find(c => c.id === id);
+      if (!competitor || competitor.finished) return;
+
+      competitor.finished = true;
+      competitor.time = getCurrentElapsed();
+
+      renderCompetitors();
+      renderResults();
+
+      const allFinished = competitors.length > 0 && competitors.every(c => c.finished);
+      if (allFinished) {
+        stopTimer();
+      }
+    }
+
+    function removeCompetitor(id) {
+      if (running) return;
+      competitors = competitors.filter(c => c.id !== id);
+      renderCompetitors();
+      renderResults();
+    }
+
+    function startTimer() {
+      if (competitors.length === 0) {
+        alert('Debes registrar al menos un competidor antes de iniciar.');
+        return;
+      }
+
+      if (running) return;
+
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 10);
+      running = true;
+      paused = false;
+
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      resumeBtn.disabled = true;
+      addCompetitorBtn.disabled = true;
+      competitorNameInput.disabled = true;
+      renderCompetitors();
+    }
+
+    function pauseTimer() {
+      if (!running) return;
+
+      clearInterval(timerInterval);
+      elapsedBeforePause += Date.now() - startTime;
+      running = false;
+      paused = true;
+
+      pauseBtn.disabled = true;
+      resumeBtn.disabled = false;
+      renderCompetitors();
+    }
+
+    function resumeTimer() {
+      if (!paused) return;
+
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 10);
+      running = true;
+      paused = false;
+
+      pauseBtn.disabled = false;
+      resumeBtn.disabled = true;
+      renderCompetitors();
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      running = false;
+      paused = false;
+      startBtn.disabled = true;
+      pauseBtn.disabled = true;
+      resumeBtn.disabled = true;
+      renderCompetitors();
+    }
+
+    function resetAll() {
+      clearInterval(timerInterval);
+      competitors = competitors.map(c => ({ ...c, finished: false, time: null }));
+      timerInterval = null;
+      startTime = null;
+      elapsedBeforePause = 0;
+      running = false;
+      paused = false;
+      timerDisplay.textContent = '00:00:00.000';
+
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      resumeBtn.disabled = true;
+      addCompetitorBtn.disabled = false;
+      competitorNameInput.disabled = false;
+
+      renderCompetitors();
+      renderResults();
+    }
+
+    addCompetitorBtn.addEventListener('click', addCompetitor);
+    startBtn.addEventListener('click', startTimer);
+    pauseBtn.addEventListener('click', pauseTimer);
+    resumeBtn.addEventListener('click', resumeTimer);
+    resetBtn.addEventListener('click', resetAll);
+    competitorNameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') addCompetitor();
+    });
+
+    renderCompetitors();
+    renderResults();
+
+    window.markArrival = markArrival;
+    window.removeCompetitor = removeCompetitor;
+  </script>
+</body>
+</html>
